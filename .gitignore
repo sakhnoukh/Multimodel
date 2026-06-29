@@ -1,0 +1,9 @@
+PRD.md
+venv
+.env
+__pycache__/
+*.pyc
+extracted_images/
+chroma_db/
+document_store.json
+data/
