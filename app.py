@@ -1,6 +1,3 @@
-import json
-import subprocess
-import sys
 from pathlib import Path
 
 import streamlit as st
@@ -11,6 +8,8 @@ from src.config import (
     DOCUMENT_STORE_PATH,
     CHROMA_DB_DIR,
 )
+from src.extract import extract_pdf
+from src.index import build_index
 from src.retrieve import retrieve_and_answer_stream
 
 
@@ -25,43 +24,63 @@ st.set_page_config(
 with st.sidebar:
     st.header("🔧 Pipeline Controls")
 
+    # PDF upload
+    uploaded_pdf = st.file_uploader(
+        "Upload a technical PDF",
+        type=["pdf"],
+        help="Upload a PDF manual to ingest. Replaces the current sample PDF.",
+    )
+    if uploaded_pdf is not None:
+        DATA_DIR.mkdir(parents=True, exist_ok=True)
+        save_path = DATA_DIR / "sample_manual.pdf"
+        with open(save_path, "wb") as f:
+            f.write(uploaded_pdf.getbuffer())
+        st.success(f"Uploaded: {uploaded_pdf.name}")
+
     # Show PDF status
     if SAMPLE_PDF_PATH.exists():
-        st.success(f"Sample PDF: {SAMPLE_PDF_PATH.name}")
+        st.success(f"Current PDF: {SAMPLE_PDF_PATH.name}")
     else:
-        st.warning("No sample PDF found in `data/`")
+        st.warning("No PDF found. Upload one above.")
 
-    # Ingestion button
-    if st.button("Run Extraction", help="Extract text and images from the PDF"):
-        with st.spinner("Extracting text and images from PDF..."):
-            result = subprocess.run(
-                [sys.executable, "-m", "src.extract"],
-                capture_output=True,
-                text=True,
-                cwd=str(Path(__file__).parent),
-            )
-            if result.returncode == 0:
-                st.success("Extraction complete!")
-                st.code(result.stdout)
-            else:
-                st.error("Extraction failed!")
-                st.code(result.stderr)
+    # One-click pipeline: Extract + Index
+    if st.button("Run Full Pipeline", help="Extract text/images and index in ChromaDB in one step"):
+        if not SAMPLE_PDF_PATH.exists():
+            st.error("Please upload a PDF first.")
+        else:
+            with st.spinner("Extracting text and images from PDF..."):
+                try:
+                    extract_pdf()
+                    st.success("Extraction complete!")
+                except Exception as e:
+                    st.error(f"Extraction failed: {e}")
 
-    # Indexing button
-    if st.button("Run Indexing", help="Generate VLM summaries and index in ChromaDB"):
-        with st.spinner("Generating VLM summaries and indexing..."):
-            result = subprocess.run(
-                [sys.executable, "-m", "src.index"],
-                capture_output=True,
-                text=True,
-                cwd=str(Path(__file__).parent),
-            )
-            if result.returncode == 0:
-                st.success("Indexing complete!")
-                st.code(result.stdout)
-            else:
-                st.error("Indexing failed!")
-                st.code(result.stderr)
+            with st.spinner("Generating VLM summaries and indexing in ChromaDB..."):
+                try:
+                    build_index()
+                    st.success("Indexing complete! You can now ask questions.")
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"Indexing failed: {e}")
+
+    # Advanced: separate steps
+    with st.expander("Advanced: Step-by-step"):
+        if st.button("Run Extraction Only", help="Extract text and images from the PDF"):
+            with st.spinner("Extracting..."):
+                try:
+                    extract_pdf()
+                    st.success("Extraction complete!")
+                except Exception as e:
+                    st.error(f"Extraction failed: {e}")
+
+        if st.button("Run Indexing Only", help="Generate VLM summaries and index in ChromaDB"):
+            with st.spinner("Indexing..."):
+                try:
+                    build_index()
+                    st.success("Indexing complete!")
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"Indexing failed: {e}")
 
     st.divider()
 
@@ -93,8 +112,7 @@ pipeline_ready = DOCUMENT_STORE_PATH.exists() and CHROMA_DB_DIR.exists()
 
 if not pipeline_ready:
     st.info(
-        "👆 The RAG pipeline hasn't been set up yet. Place a PDF in `data/sample_manual.pdf`, "
-        "then click **Run Extraction** and **Run Indexing** in the sidebar."
+        "👆 Upload a PDF in the sidebar and click **Run Full Pipeline** to get started."
     )
 
 # Initialize chat history

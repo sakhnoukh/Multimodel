@@ -6,6 +6,8 @@ from src.config import (
     SAMPLE_PDF_PATH,
     EXTRACTED_IMAGES_DIR,
     DOCUMENT_STORE_PATH,
+    CHUNK_SIZE,
+    CHUNK_OVERLAP,
 )
 
 
@@ -25,15 +27,17 @@ def extract_pdf(pdf_path: Path = SAMPLE_PDF_PATH) -> list[dict]:
     for page_num in range(len(doc)):
         page = doc[page_num]
 
-        # Extract text
+        # Extract text and chunk with overlap
         page_text = page.get_text("text").strip()
         if page_text:
-            text_elements.append({
-                "type": "text",
-                "content": page_text,
-                "path": None,
-                "page": page_num + 1,
-            })
+            chunks = _chunk_text(page_text, CHUNK_SIZE, CHUNK_OVERLAP)
+            for chunk in chunks:
+                text_elements.append({
+                    "type": "text",
+                    "content": chunk,
+                    "path": None,
+                    "page": page_num + 1,
+                })
 
         # Extract images
         image_list = page.get_images(full=True)
@@ -81,6 +85,22 @@ def extract_pdf(pdf_path: Path = SAMPLE_PDF_PATH) -> list[dict]:
 
     print(f"Extraction complete: {len(text_elements)} text chunks, {len(image_elements)} images")
     return elements
+
+
+def _chunk_text(text: str, chunk_size: int, overlap: int) -> list[str]:
+    """Split text into overlapping chunks by word count."""
+    words = text.split()
+    if len(words) <= chunk_size:
+        return [text]
+
+    chunks = []
+    start = 0
+    while start < len(words):
+        end = start + chunk_size
+        chunk = " ".join(words[start:end])
+        chunks.append(chunk)
+        start = end - overlap
+    return chunks
 
 
 def _save_document_store(elements: list[dict]) -> None:

@@ -12,9 +12,12 @@ DOCUMENT_STORE_PATH = BASE_DIR / "document_store.json"
 
 SAMPLE_PDF_PATH = DATA_DIR / "sample_manual.pdf"
 
-EMBEDDING_MODEL_NAME = "BAAI/bge-m3"
+EMBEDDING_MODEL_NAME = "BAAI/bge-small-en-v1.5"
 CHROMA_COLLECTION_NAME = "multimodal_rag"
 TOP_K_RESULTS = 3
+
+CHUNK_SIZE = 500
+CHUNK_OVERLAP = 100
 
 SILICONFLOW_API_KEY = os.getenv("SILICONFLOW_API_KEY", "")
 SILICONFLOW_BASE_URL = "https://api.siliconflow.com/v1"
