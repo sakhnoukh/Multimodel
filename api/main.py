@@ -26,6 +26,7 @@ from src.summarize import (
     chat_with_summary_stream,
     regenerate_summary_with_feedback,
 )
+from src.explain import explain_stream
 
 app = FastAPI(title="Multimodal RAG API", version="1.0.0")
 
@@ -65,6 +66,13 @@ class SummaryFeedbackRequest(BaseModel):
 
 class ToggleActiveRequest(BaseModel):
     active: bool
+
+
+class ExplainRequest(BaseModel):
+    type: str  # "text" or "image"
+    content: str  # highlighted text or base64-encoded JPEG
+    page: int
+    source_pdf: str
 
 
 # --- Helpers ---
@@ -319,6 +327,28 @@ async def submit_summary_feedback(request: SummaryFeedbackRequest):
         raise HTTPException(status_code=500, detail=f"Feedback regeneration failed: {e}")
 
     return {"message": f"Summary regenerated for {request.pdf_name}", "summary": summary}
+
+
+# --- Explain (SSE streaming) ---
+
+@app.post("/api/explain")
+async def explain(request: ExplainRequest):
+    def event_stream():
+        stream = explain_stream(
+            content_type=request.type,
+            content=request.content,
+            page=request.page,
+            source_pdf=request.source_pdf,
+        )
+        for chunk in stream:
+            yield _sse({"type": "token", "content": chunk})
+        yield _sse({"type": "done"})
+
+    return StreamingResponse(
+        event_stream(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
 
 
 # --- File Serving ---

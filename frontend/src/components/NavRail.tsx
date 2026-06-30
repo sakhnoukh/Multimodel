@@ -1,10 +1,10 @@
 import { NavLink } from "react-router-dom";
-import { MessageSquare, FileText, BookOpen } from "lucide-react";
+import { MessageSquare, FileText, GraduationCap } from "lucide-react";
 
 const navItems = [
   { to: "/", label: "Chat", icon: MessageSquare },
   { to: "/summaries", label: "Summaries", icon: FileText },
-  { to: "/viewer", label: "Viewer", icon: BookOpen },
+  { to: "/viewer", label: "Reader", icon: GraduationCap },
 ];
 
 export default function NavRail() {

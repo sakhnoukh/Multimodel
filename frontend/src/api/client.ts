@@ -248,6 +248,59 @@ export async function streamSummaryChat(
   callbacks.onDone?.();
 }
 
+export async function streamExplanation(
+  type: "text" | "image",
+  content: string,
+  page: number,
+  sourcePdf: string,
+  callbacks: {
+    onToken?: (token: string) => void;
+    onDone?: () => void;
+    onError?: (error: string) => void;
+  }
+): Promise<void> {
+  const res = await fetch(`${API_BASE}/api/explain`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ type, content, page, source_pdf: sourcePdf }),
+  });
+
+  if (!res.ok || !res.body) {
+    const err = await res.json().catch(() => ({ detail: "Explanation request failed" }));
+    callbacks.onError?.(err.detail || "Explanation request failed");
+    return;
+  }
+
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+
+    buffer += decoder.decode(value, { stream: true });
+    const lines = buffer.split("\n");
+    buffer = lines.pop() || "";
+
+    for (const line of lines) {
+      if (line.startsWith("data: ")) {
+        try {
+          const data = JSON.parse(line.slice(6));
+          if (data.type === "token" && data.content) {
+            callbacks.onToken?.(data.content);
+          } else if (data.type === "done") {
+            callbacks.onDone?.();
+          }
+        } catch {
+          // ignore malformed lines
+        }
+      }
+    }
+  }
+  callbacks.onDone?.();
+}
+
 export function getPdfUrl(name: string): string {
   return `${API_BASE}/api/pdf-file/${encodeURIComponent(name)}`;
 }
