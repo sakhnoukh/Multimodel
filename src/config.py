@@ -10,6 +10,7 @@ EXTRACTED_IMAGES_DIR = BASE_DIR / "extracted_images"
 CHROMA_DB_DIR = BASE_DIR / "chroma_db"
 DOCUMENT_STORE_PATH = BASE_DIR / "document_store.json"
 PDF_REGISTRY_PATH = BASE_DIR / "pdf_registry.json"
+SUMMARIES_DIR = BASE_DIR / "summaries"
 
 SAMPLE_PDF_PATH = DATA_DIR / "sample_manual.pdf"
 
@@ -29,3 +30,11 @@ VLM_SUMMARY_PROMPT = (
     "in detail, including any labels, components, connections, and flow shown. "
     "Be precise and thorough — this description will be used for semantic search retrieval."
 )
+
+PDF_SUMMARY_PROMPT = (
+    "You are a technical documentation assistant. Summarize the following technical manual "
+    "in well-structured markdown format. Use headers (##), bullet points, and tables where appropriate. "
+    "Only include sections that are explicitly requested. Be factual and precise."
+)
+
+SUMMARY_MAX_TOKENS = 2048

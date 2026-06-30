@@ -1,14 +1,18 @@
 {
-  "sample_manual.pdf": {
-    "active": true,
-    "element_count": 10
-  },
   "Repairability-Snapshot---Framework-Laptop-16.pdf": {
     "active": true,
     "element_count": 20
   },
   "prusa3d_manual_mk3s_en.pdf": {
     "active": true,
-    "element_count": 224
+    "element_count": 224,
+    "has_summary": true,
+    "summary_path": "/Users/samiakhnoukh/Documents/Personal Proejcts/multimodal/summaries/prusa3d_manual_mk3s_en.md"
+  },
+  "sample_manual.pdf": {
+    "active": true,
+    "element_count": 10,
+    "has_summary": true,
+    "summary_path": "/Users/samiakhnoukh/Documents/Personal Proejcts/multimodal/summaries/sample_manual.md"
   }
 }

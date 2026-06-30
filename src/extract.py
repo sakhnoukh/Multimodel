@@ -142,6 +142,13 @@ def remove_pdf(pdf_name: str) -> None:
         del registry[pdf_name]
         PDF_REGISTRY_PATH.write_text(json.dumps(registry, indent=2))
 
+    # Also delete any saved summary
+    from src.config import SUMMARIES_DIR
+    safe_name = pdf_name.replace(" ", "_").replace(".pdf", "")
+    summary_path = SUMMARIES_DIR / f"{safe_name}.md"
+    if summary_path.exists():
+        summary_path.unlink()
+
 
 def get_pdf_registry() -> dict:
     """Return the PDF registry {pdf_name: {active, element_count}}."""
