@@ -65,10 +65,18 @@ def generate_pdf_summary(
     if len(full_text) > MAX_TEXT_CHARS:
         full_text = full_text[:MAX_TEXT_CHARS] + "\n\n[... text truncated due to length ...]"
 
-    # Build prompt
-    section_instructions = "\n".join(
-        f"- {FOCUS_SECTIONS[key]}" for key in focus_areas if key in FOCUS_SECTIONS
-    )
+    # Build prompt — case-insensitive match for legacy keys, generic fallback for new ones
+    focus_lower = {k.lower(): k for k in FOCUS_SECTIONS}
+    section_parts: list[str] = []
+    for area in focus_areas:
+        legacy_key = focus_lower.get(area.lower())
+        if legacy_key:
+            section_parts.append(f"- {FOCUS_SECTIONS[legacy_key]}")
+        else:
+            section_parts.append(
+                f"- ## {area}\nSummarize the {area.lower()} from the document."
+            )
+    section_instructions = "\n".join(section_parts)
     if not section_instructions:
         section_instructions = f"- {FOCUS_SECTIONS['overview']}"
 
@@ -146,6 +154,77 @@ def list_summaries() -> list[str]:
     """Return a list of PDF names that have summaries."""
     registry = _load_registry()
     return [name for name, info in registry.items() if info.get("has_summary")]
+
+
+def regenerate_summary_with_feedback(
+    pdf_name: str,
+    feedback: str,
+) -> str:
+    """Regenerate a PDF summary incorporating user feedback.
+
+    Takes the existing summary, the original PDF text, and the user's feedback
+    to produce an improved summary. The old summary file is replaced.
+
+    Args:
+        pdf_name: Name of the PDF (as stored in registry).
+        feedback: User's feedback on what to change/improve.
+
+    Returns:
+        The regenerated markdown summary string.
+    """
+    existing_summary = get_summary(pdf_name)
+    if existing_summary is None:
+        raise FileNotFoundError(f"No existing summary found for {pdf_name}.")
+
+    if not DOCUMENT_STORE_PATH.exists():
+        raise FileNotFoundError("document_store.json not found. Ingest a PDF first.")
+
+    store: dict = json.loads(DOCUMENT_STORE_PATH.read_text())
+
+    text_entries = [
+        (entry["page"], entry["content"])
+        for entry in store.values()
+        if entry.get("source_pdf") == pdf_name and entry["type"] == "text" and entry.get("content")
+    ]
+    text_entries.sort(key=lambda x: x[0])
+
+    if not text_entries:
+        raise ValueError(f"No text content found for {pdf_name}. Has it been ingested?")
+
+    full_text = "\n\n".join(content for _, content in text_entries)
+    if len(full_text) > MAX_TEXT_CHARS:
+        full_text = full_text[:MAX_TEXT_CHARS] + "\n\n[... text truncated due to length ...]"
+
+    prompt = (
+        f"{PDF_SUMMARY_PROMPT}\n\n"
+        f"The user has reviewed the current summary and provided the following feedback. "
+        f"Regenerate the summary in full, incorporating this feedback while remaining "
+        f"factual and grounded in the source text.\n\n"
+        f"--- CURRENT SUMMARY ---\n{existing_summary}\n\n"
+        f"--- USER FEEDBACK ---\n{feedback.strip()}\n\n"
+        f"--- MANUAL TEXT ---\n{full_text}"
+    )
+
+    from openai import OpenAI
+    client = OpenAI(api_key=SILICONFLOW_API_KEY, base_url=SILICONFLOW_BASE_URL)
+
+    response = client.chat.completions.create(
+        model=VLM_MODEL_NAME,
+        messages=[{"role": "user", "content": prompt}],
+        max_tokens=SUMMARY_MAX_TOKENS,
+        temperature=0.3,
+    )
+
+    summary = response.choices[0].message.content.strip()
+
+    SUMMARIES_DIR.mkdir(parents=True, exist_ok=True)
+    safe_name = pdf_name.replace(" ", "_").replace(".pdf", "")
+    summary_path = SUMMARIES_DIR / f"{safe_name}.md"
+    summary_path.write_text(summary)
+
+    _update_registry_summary(pdf_name, str(summary_path))
+
+    return summary
 
 
 def chat_with_summary_stream(summary_text: str, question: str, history: list[dict] | None = None):

@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from "react";
-import { Send, FileText, Trash2, Sparkles, X } from "lucide-react";
+import { Send, FileText, Trash2, Sparkles, X, MessageSquare, RefreshCw } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import NavRail from "../components/NavRail";
@@ -9,9 +9,21 @@ import {
   generateSummary,
   deleteSummary,
   streamSummaryChat,
+  submitFeedback,
   fetchPdfs,
   type PdfInfo,
 } from "../api/client";
+
+const summaryOptions: Record<string, string[]> = {
+  Standard: ["High-Level Overview", "Core Concepts & Terminology", "Key Arguments & Data Points", "Study Guide & Practice Questions"],
+  Law: ["Overview", "Core Arguments", "Precedents", "Liabilities"],
+  CS: ["Overview", "Architecture", "Code Snippets", "Limitations"],
+  Finance: ["Overview", "Financial Metrics", "Forward-Looking", "Risk Factors"],
+  Medical: ["Overview", "Methodology", "Clinical Outcomes", "Adverse Effects"],
+  Humanities: ["Overview", "Thematic Analysis", "Historical Context", "Key Quotes"],
+};
+
+const docTypes = Object.keys(summaryOptions);
 
 interface SummaryChatMessage {
   role: "user" | "assistant";
@@ -26,8 +38,12 @@ export default function Summaries() {
   const [chatInput, setChatInput] = useState("");
   const [isGenerating, setIsGenerating] = useState(false);
   const [isChatting, setIsChatting] = useState(false);
+  const [isRegenerating, setIsRegenerating] = useState(false);
   const [showGenForm, setShowGenForm] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [rightTab, setRightTab] = useState<"chat" | "feedback">("chat");
+  const [feedbackInput, setFeedbackInput] = useState("");
+  const [feedbackStatus, setFeedbackStatus] = useState<string | null>(null);
   const chatEndRef = useRef<HTMLDivElement>(null);
 
   const loadData = async () => {
@@ -126,6 +142,32 @@ export default function Summaries() {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
       handleChatSend();
+    }
+  };
+
+  const handleFeedbackSubmit = async () => {
+    if (!feedbackInput.trim() || !selectedPdf || isRegenerating) return;
+    const feedback = feedbackInput.trim();
+    setFeedbackInput("");
+    setIsRegenerating(true);
+    setFeedbackStatus("Regenerating summary with your feedback...");
+    setError(null);
+    try {
+      const result = await submitFeedback(selectedPdf, feedback);
+      setSummaryMd(result.summary);
+      setFeedbackStatus("Summary updated successfully.");
+    } catch (e: any) {
+      setError(e.message);
+      setFeedbackStatus(null);
+    } finally {
+      setIsRegenerating(false);
+    }
+  };
+
+  const handleFeedbackKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      handleFeedbackSubmit();
     }
   };
 
@@ -240,71 +282,150 @@ export default function Summaries() {
               </div>
             </div>
 
-            {/* Chat with Summary */}
+            {/* Right Panel — Tabbed: Chat / Feedback */}
             <div className="w-96 flex-shrink-0 flex flex-col bg-zinc-900">
-              <div className="px-4 py-2 border-b border-zinc-800 flex items-center justify-between">
-                <span className="text-sm font-semibold text-zinc-200">Chat</span>
-                <span className="text-[10px] mono text-zinc-600">
-                  ctx: summary
-                </span>
+              {/* Tab Header */}
+              <div className="flex border-b border-zinc-800">
+                <button
+                  onClick={() => setRightTab("chat")}
+                  className={`flex-1 px-4 py-2 flex items-center justify-center gap-1.5 text-xs font-semibold transition-colors ${
+                    rightTab === "chat"
+                      ? "text-cyan-400 border-b-2 border-cyan-500 bg-zinc-800/50"
+                      : "text-zinc-500 hover:text-zinc-300"
+                  }`}
+                >
+                  <MessageSquare size={12} />
+                  Chat
+                </button>
+                <button
+                  onClick={() => setRightTab("feedback")}
+                  className={`flex-1 px-4 py-2 flex items-center justify-center gap-1.5 text-xs font-semibold transition-colors ${
+                    rightTab === "feedback"
+                      ? "text-cyan-400 border-b-2 border-cyan-500 bg-zinc-800/50"
+                      : "text-zinc-500 hover:text-zinc-300"
+                  }`}
+                >
+                  <RefreshCw size={12} />
+                  Feedback
+                </button>
               </div>
 
-              <div className="flex-1 overflow-y-auto px-4 py-3">
-                {chatMessages.length === 0 ? (
-                  <div className="flex flex-col items-center justify-center h-full gap-2">
-                    <p className="text-[10px] mono text-zinc-600 text-center">
-                      Ask questions about {selectedPdf} based on its summary.
-                    </p>
+              {/* Chat Tab */}
+              {rightTab === "chat" && (
+                <>
+                  <div className="px-4 py-1.5 border-b border-zinc-800 flex items-center justify-between">
+                    <span className="text-[10px] mono text-zinc-600">ctx: summary</span>
                   </div>
-                ) : (
-                  <div className="space-y-3">
-                    {chatMessages.map((msg, idx) => (
-                      <div key={idx} className="flex gap-2">
-                        <span
-                          className={`text-[10px] mono flex-shrink-0 mt-0.5 ${
-                            msg.role === "user" ? "text-zinc-500" : "text-cyan-500"
-                          }`}
-                        >
-                          {msg.role === "user" ? "USR" : "AI"}
-                        </span>
-                        <div className="flex-1 min-w-0">
-                          {msg.role === "user" ? (
-                            <p className="text-xs text-zinc-300">{msg.content}</p>
-                          ) : (
-                            <div className="markdown-body text-xs">
-                              <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                                {msg.content}
-                              </ReactMarkdown>
-                            </div>
-                          )}
-                        </div>
+                  <div className="flex-1 overflow-y-auto px-4 py-3">
+                    {chatMessages.length === 0 ? (
+                      <div className="flex flex-col items-center justify-center h-full gap-2">
+                        <p className="text-[10px] mono text-zinc-600 text-center">
+                          Ask questions about {selectedPdf} based on its summary.
+                        </p>
                       </div>
-                    ))}
-                    <div ref={chatEndRef} />
+                    ) : (
+                      <div className="space-y-3">
+                        {chatMessages.map((msg, idx) => (
+                          <div key={idx} className="flex gap-2">
+                            <span
+                              className={`text-[10px] mono flex-shrink-0 mt-0.5 ${
+                                msg.role === "user" ? "text-zinc-500" : "text-cyan-500"
+                              }`}
+                            >
+                              {msg.role === "user" ? "USR" : "AI"}
+                            </span>
+                            <div className="flex-1 min-w-0">
+                              {msg.role === "user" ? (
+                                <p className="text-xs text-zinc-300">{msg.content}</p>
+                              ) : (
+                                <div className="markdown-body text-xs">
+                                  <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                                    {msg.content}
+                                  </ReactMarkdown>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                        <div ref={chatEndRef} />
+                      </div>
+                    )}
                   </div>
-                )}
-              </div>
+                  <div className="border-t border-zinc-800 px-3 py-2">
+                    <div className="flex gap-2 items-end">
+                      <textarea
+                        value={chatInput}
+                        onChange={(e) => setChatInput(e.target.value)}
+                        onKeyDown={handleChatKeyDown}
+                        placeholder="Ask about the summary..."
+                        rows={1}
+                        className="input-field flex-1 px-2.5 py-1.5 text-xs rounded resize-none mono"
+                        disabled={isChatting}
+                      />
+                      <button
+                        onClick={handleChatSend}
+                        disabled={isChatting || !chatInput.trim()}
+                        className="btn btn-primary px-2 py-1.5 disabled:opacity-40"
+                      >
+                        <Send size={12} />
+                      </button>
+                    </div>
+                  </div>
+                </>
+              )}
 
-              <div className="border-t border-zinc-800 px-3 py-2">
-                <div className="flex gap-2 items-end">
-                  <textarea
-                    value={chatInput}
-                    onChange={(e) => setChatInput(e.target.value)}
-                    onKeyDown={handleChatKeyDown}
-                    placeholder="Ask about the summary..."
-                    rows={1}
-                    className="input-field flex-1 px-2.5 py-1.5 text-xs rounded resize-none mono"
-                    disabled={isChatting}
-                  />
-                  <button
-                    onClick={handleChatSend}
-                    disabled={isChatting || !chatInput.trim()}
-                    className="btn btn-primary px-2 py-1.5 disabled:opacity-40"
-                  >
-                    <Send size={12} />
-                  </button>
-                </div>
-              </div>
+              {/* Feedback Tab */}
+              {rightTab === "feedback" && (
+                <>
+                  <div className="px-4 py-1.5 border-b border-zinc-800">
+                    <span className="text-[10px] mono text-zinc-600">
+                      Submit feedback to regenerate summary
+                    </span>
+                  </div>
+                  <div className="flex-1 overflow-y-auto px-4 py-3">
+                    {feedbackStatus ? (
+                      <div className="flex flex-col items-center justify-center h-full gap-3">
+                        {isRegenerating ? (
+                          <RefreshCw size={20} className="text-cyan-500 animate-spin" />
+                        ) : (
+                          <RefreshCw size={20} className="text-cyan-600" />
+                        )}
+                        <p className="text-[10px] mono text-zinc-500 text-center">
+                          {feedbackStatus}
+                        </p>
+                      </div>
+                    ) : (
+                      <div className="flex flex-col items-center justify-center h-full gap-3">
+                        <RefreshCw size={20} className="text-zinc-700" />
+                        <p className="text-[10px] mono text-zinc-600 text-center">
+                          Describe what you'd like to change about the summary.
+                          The summary will be completely regenerated with your feedback incorporated.
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                  <div className="border-t border-zinc-800 px-3 py-2">
+                    <div className="flex gap-2 items-end">
+                      <textarea
+                        value={feedbackInput}
+                        onChange={(e) => setFeedbackInput(e.target.value)}
+                        onKeyDown={handleFeedbackKeyDown}
+                        placeholder="e.g. Add more detail on safety procedures, remove the overview section..."
+                        rows={2}
+                        className="input-field flex-1 px-2.5 py-1.5 text-xs rounded resize-none mono"
+                        disabled={isRegenerating}
+                      />
+                      <button
+                        onClick={handleFeedbackSubmit}
+                        disabled={isRegenerating || !feedbackInput.trim()}
+                        className="btn btn-primary px-2 py-1.5 disabled:opacity-40"
+                      >
+                        <RefreshCw size={12} />
+                      </button>
+                    </div>
+                  </div>
+                </>
+              )}
             </div>
           </>
         )}
@@ -336,19 +457,28 @@ function GenerateModal({
   onGenerate: (focusAreas: string[], customInstructions: string) => void;
   onCancel: () => void;
 }) {
-  const [overview, setOverview] = useState(true);
-  const [topics, setTopics] = useState(true);
-  const [components, setComponents] = useState(true);
-  const [safety, setSafety] = useState(true);
+  const [docType, setDocType] = useState<string>("Standard");
+  const [selectedAreas, setSelectedAreas] = useState<Record<string, boolean>>(
+    Object.fromEntries(summaryOptions["Standard"].map((opt) => [opt, true]))
+  );
   const [custom, setCustom] = useState("");
 
+  const handleDocTypeChange = (newType: string) => {
+    setDocType(newType);
+    setSelectedAreas(
+      Object.fromEntries(summaryOptions[newType].map((opt) => [opt, true]))
+    );
+  };
+
+  const toggleArea = (label: string, checked: boolean) => {
+    setSelectedAreas((prev) => ({ ...prev, [label]: checked }));
+  };
+
   const handleGenerate = () => {
-    const areas: string[] = [];
-    if (overview) areas.push("overview");
-    if (topics) areas.push("topics");
-    if (components) areas.push("components");
-    if (safety) areas.push("safety");
-    onGenerate(areas.length > 0 ? areas : ["overview"], custom);
+    const areas = summaryOptions[docType].filter(
+      (opt) => selectedAreas[opt]
+    );
+    onGenerate(areas.length > 0 ? areas : [summaryOptions[docType][0]], custom);
   };
 
   return (
@@ -364,11 +494,31 @@ function GenerateModal({
         </div>
         <div className="px-4 py-3 space-y-2">
           <p className="text-xs text-zinc-500 truncate">{pdfName}</p>
+          <div className="flex items-center gap-2">
+            <span className="text-[10px] mono text-zinc-500 uppercase tracking-wider">
+              Doc Type
+            </span>
+            <select
+              value={docType}
+              onChange={(e) => handleDocTypeChange(e.target.value)}
+              className="input-field px-2 py-1 text-xs rounded mono flex-1"
+            >
+              {docTypes.map((t) => (
+                <option key={t} value={t}>
+                  {t}
+                </option>
+              ))}
+            </select>
+          </div>
           <div className="space-y-1.5">
-            <Checkbox label="Overview" checked={overview} onChange={setOverview} />
-            <Checkbox label="Key Topics / TOC" checked={topics} onChange={setTopics} />
-            <Checkbox label="Components & Specs" checked={components} onChange={setComponents} />
-            <Checkbox label="Safety & Warnings" checked={safety} onChange={setSafety} />
+            {summaryOptions[docType].map((label) => (
+              <Checkbox
+                key={label}
+                label={label}
+                checked={selectedAreas[label] ?? false}
+                onChange={(checked) => toggleArea(label, checked)}
+              />
+            ))}
           </div>
           <textarea
             value={custom}

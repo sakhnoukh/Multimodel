@@ -24,6 +24,7 @@ from src.summarize import (
     delete_summary,
     list_summaries,
     chat_with_summary_stream,
+    regenerate_summary_with_feedback,
 )
 
 app = FastAPI(title="Multimodal RAG API", version="1.0.0")
@@ -55,6 +56,11 @@ class SummaryChatRequest(BaseModel):
     pdf_name: str
     question: str
     history: Optional[list[dict]] = None
+
+
+class SummaryFeedbackRequest(BaseModel):
+    pdf_name: str
+    feedback: str
 
 
 class ToggleActiveRequest(BaseModel):
@@ -295,6 +301,24 @@ async def summary_chat(request: SummaryChatRequest):
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
+
+
+# --- Summary Feedback (regenerate) ---
+
+@app.post("/api/summaries/feedback")
+async def submit_summary_feedback(request: SummaryFeedbackRequest):
+    try:
+        summary = await asyncio.to_thread(
+            regenerate_summary_with_feedback,
+            request.pdf_name,
+            request.feedback,
+        )
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Feedback regeneration failed: {e}")
+
+    return {"message": f"Summary regenerated for {request.pdf_name}", "summary": summary}
 
 
 # --- File Serving ---

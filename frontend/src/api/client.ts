@@ -123,6 +123,22 @@ export async function deleteSummary(name: string): Promise<any> {
   return res.json();
 }
 
+export async function submitFeedback(
+  pdfName: string,
+  feedback: string
+): Promise<{ message: string; summary: string }> {
+  const res = await fetch(`${API_BASE}/api/summaries/feedback`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ pdf_name: pdfName, feedback }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: "Feedback submission failed" }));
+    throw new Error(err.detail || "Feedback submission failed");
+  }
+  return res.json();
+}
+
 interface SSECallbacks {
   onRetrievedItems?: (items: RetrievedItem[]) => void;
   onToken?: (token: string) => void;
